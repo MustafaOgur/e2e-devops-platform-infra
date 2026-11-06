@@ -3,12 +3,26 @@ NODES = [
   { name: "k8s-w1", ip: "192.168.56.11", cpus: 2, memory: 4608 },
 ]
 
+# Ansible'ın WSL'den bağlanacağı anahtarın public kısmı (Git'e girmez)
+PUBLIC_KEY_FILE = File.join(__dir__, "ssh", "k8s-lab.pub")
+
 Vagrant.configure("2") do |config|
   config.vm.box = "bento/ubuntu-24.04"
   # Hyper-V açıkken VM'lerin ilk açılışı uzun sürebilir
   config.vm.boot_timeout = 600
   # Dosyalar VM'lere Ansible ile gider, paylaşımlı klasör gerekmiyor
   config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  if File.exist?(PUBLIC_KEY_FILE)
+    # Anahtar zaten ekliyse tekrar eklenmez
+    config.vm.provision "shell", name: "authorize-ansible-key",
+      args: [File.read(PUBLIC_KEY_FILE).strip], inline: <<-SHELL
+        key_file=/home/vagrant/.ssh/authorized_keys
+        grep -qxF "$1" "$key_file" || echo "$1" >> "$key_file"
+      SHELL
+  else
+    warn "Uyarı: #{PUBLIC_KEY_FILE} bulunamadı, Ansible anahtarı VM'lere eklenmeyecek."
+  end
 
   NODES.each do |node|
     config.vm.define node[:name] do |machine|

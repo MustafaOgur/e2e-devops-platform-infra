@@ -1,6 +1,7 @@
 # Vagrant
 .vagrant/
 *.box
+vagrant/ssh/
 
 # Ansible
 *.retry
