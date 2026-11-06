@@ -1,0 +1,44 @@
+# deb822_repository modülü bu paketi gerektiriyor
+- name: Install python3-debian
+  ansible.builtin.apt:
+    name: python3-debian
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# Güncel Kubernetes containerd 2.x istiyor; Docker deposu güncel sürümü sağlıyor
+- name: Add Docker apt repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: https://download.docker.com/linux/ubuntu
+    suites: "{{ ansible_facts['distribution_release'] }}"
+    components: stable
+    signed_by: https://download.docker.com/linux/ubuntu/gpg
+
+- name: Install containerd
+  ansible.builtin.apt:
+    name: containerd.io
+    state: present
+    update_cache: true
+
+# Paketle gelen ayar dosyası Kubernetes'in kullandığı CRI eklentisini kapatıyor;
+# bu yüzden varsayılan ayar baştan üretilip üzerine yazılır
+- name: Generate default containerd config
+  ansible.builtin.command: containerd config default
+  register: containerd_default_config
+  changed_when: false
+
+# kubelet ve containerd kaynakları aynı yöntemle (systemd) yönetmeli
+- name: Write containerd config with systemd cgroup driver
+  ansible.builtin.copy:
+    dest: /etc/containerd/config.toml
+    content: "{{ containerd_default_config.stdout | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true') }}\n"
+    mode: "0644"
+  notify: Restart containerd
+
+- name: Enable and start containerd
+  ansible.builtin.service:
+    name: containerd
+    state: started
+    enabled: true
