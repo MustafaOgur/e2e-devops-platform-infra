@@ -1,0 +1,19 @@
+# Vagrant
+.vagrant/
+*.box
+
+# Ansible
+*.retry
+
+# Kubeconfig ve secret'lar
+kubeconfig
+*.kubeconfig
+.env
+.env.*
+
+# Editör ve işletim sistemi
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
