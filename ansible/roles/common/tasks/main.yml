@@ -1,0 +1,67 @@
+# Swap: kubelet varsayılan olarak swap açıkken çalışmaz
+- name: Disable swap now
+  ansible.builtin.command: swapoff -a
+  when: ansible_facts["swaptotal_mb"] > 0
+
+- name: Disable swap permanently
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#\s].*\sswap\s.*)$'
+    replace: '# \1'
+
+# Kernel modülleri: container dosya sistemi ve pod ağ trafiği için
+- name: Load kernel modules on boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: "0644"
+
+- name: Load kernel modules now
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+# sysctl: pod trafiğinin node'lar arasında yönlendirilmesi için
+- name: Apply Kubernetes network settings
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    reload: true
+  loop:
+    - net.ipv4.ip_forward
+    - net.bridge.bridge-nf-call-iptables
+    - net.bridge.bridge-nf-call-ip6tables
+
+# /etc/hosts: node adı 127.0.x.1 yerine node IP'sine çözülmeli
+- name: Remove loopback entry for node hostname
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.[12]\.1\s.*\b{{ inventory_hostname }}\b'
+    state: absent
+
+- name: Add all nodes to /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '\s{{ item }}$'
+    line: "{{ hostvars[item].ansible_host }} {{ item }}"
+  loop: "{{ groups['k8s'] }}"
+
+# Zaman senkronu: saat kayması sertifika doğrulamasını bozar
+- name: Install chrony
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable and start chrony
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
