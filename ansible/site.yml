@@ -11,3 +11,9 @@
   become: true
   roles:
     - control_plane
+
+- name: Join worker nodes
+  hosts: workers
+  become: true
+  roles:
+    - worker

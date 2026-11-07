@@ -1,0 +1,32 @@
+# kubelet.conf sadece node cluster'a katıldıktan sonra oluşur
+- name: Check whether the node already joined the cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Join the cluster
+  when: not kubelet_conf.stat.exists
+  block:
+    # Join token'ı 24 saat geçerli; her katılımda yenisi üretilir
+    - name: Create join command on the control plane
+      ansible.builtin.command: kubeadm token create --print-join-command
+      register: join_command
+      delegate_to: "{{ groups['control_plane'][0] }}"
+
+    - name: Join the node to the cluster
+      ansible.builtin.command: "{{ join_command.stdout }} --node-name {{ inventory_hostname }}"
+
+- name: Wait for the worker node to be Ready
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/kubernetes/admin.conf
+    wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=600s
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  changed_when: false
+
+# kubectl get nodes çıktısında ROLES sütununda "worker" görünsün
+- name: Label the node as worker
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/kubernetes/admin.conf
+    label node {{ inventory_hostname }} node-role.kubernetes.io/worker= --overwrite
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  changed_when: false
