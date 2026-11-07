@@ -1,0 +1,2 @@
+# Paket deposu minor sürüme göre ayrılır; yükseltme bu değeri değiştirerek yapılır
+kubernetes_version: "1.37"
