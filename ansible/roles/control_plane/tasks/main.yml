@@ -1,0 +1,92 @@
+# Cluster sürümü kurulu kubeadm ile aynı olur
+- name: Get kubeadm version
+  ansible.builtin.command: kubeadm version -o short
+  register: kubeadm_version
+  changed_when: false
+
+- name: Write kubeadm config
+  ansible.builtin.template:
+    src: kubeadm-config.yaml.j2
+    dest: /etc/kubernetes/kubeadm-config.yaml
+    mode: "0600"
+
+- name: Check whether the cluster is already initialized
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: admin_conf
+
+- name: Initialize the cluster
+  ansible.builtin.command: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
+  when: not admin_conf.stat.exists
+
+- name: Create kubeconfig directory for vagrant user
+  ansible.builtin.file:
+    path: /home/vagrant/.kube
+    state: directory
+    owner: vagrant
+    group: vagrant
+    mode: "0700"
+
+- name: Copy kubeconfig for vagrant user
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/vagrant/.kube/config
+    remote_src: true
+    owner: vagrant
+    group: vagrant
+    mode: "0600"
+
+# Helm: Cilium'u kurmak için
+- name: Check installed Helm version
+  ansible.builtin.command: /usr/local/bin/helm version --short
+  register: helm_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install Helm
+  when: helm_installed.rc != 0 or not helm_installed.stdout.startswith('v' ~ helm_version)
+  block:
+    - name: Download and extract Helm
+      ansible.builtin.unarchive:
+        src: "https://get.helm.sh/helm-v{{ helm_version }}-linux-amd64.tar.gz"
+        dest: /tmp
+        remote_src: true
+
+    - name: Install Helm binary
+      ansible.builtin.copy:
+        src: /tmp/linux-amd64/helm
+        dest: /usr/local/bin/helm
+        remote_src: true
+        mode: "0755"
+
+# Ansible'ın Helm modülü hedef makinede PyYAML ister
+- name: Install python3-yaml
+  ansible.builtin.apt:
+    name: python3-yaml
+    state: present
+
+- name: Install Cilium
+  kubernetes.core.helm:
+    name: cilium
+    chart_ref: cilium
+    chart_repo_url: https://helm.cilium.io/
+    chart_version: "{{ cilium_version }}"
+    release_namespace: kube-system
+    kubeconfig: /etc/kubernetes/admin.conf
+    binary_path: /usr/local/bin/helm
+    values:
+      ipam:
+        mode: cluster-pool
+        operator:
+          clusterPoolIPv4PodCIDRList:
+            - "{{ pod_network_cidr }}"
+      # İki node'luk lab için tek kopya yeterli, RAM tasarrufu sağlar
+      operator:
+        replicas: 1
+
+# Yerel lab'de ilk kurulum yavaş olabiliyor; bileşenlerin oturması için uzun süre tanınır
+- name: Wait for control plane node to be Ready
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/kubernetes/admin.conf
+    wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=600s
+  changed_when: false

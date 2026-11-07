@@ -1,0 +1,27 @@
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: {{ ansible_host }}
+  bindPort: 6443
+nodeRegistration:
+  name: {{ inventory_hostname }}
+  criSocket: unix:///run/containerd/containerd.sock
+  kubeletExtraArgs:
+    - name: node-ip
+      value: "{{ ansible_host }}"
+  # Control-plane uygulama pod'larını da çalıştırır (2 node'luk lab)
+  taints: []
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: {{ kubeadm_version.stdout }}
+apiServer:
+  certSANs:
+    - {{ ansible_host }}
+    - {{ inventory_hostname }}
+networking:
+  podSubnet: {{ pod_network_cidr }}
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
