@@ -1,0 +1,5 @@
+k3s_version: "v1.37.2+k3s1"
+# kubeadm kurulumuyla aynı pod ağı; NAT ve host-only ağlarla çakışmaz
+k3s_pod_cidr: "10.244.0.0/16"
+# Her VM'de eth0 (NAT) aynı IP'ye sahip; node'lar arası trafik host-only kartından geçmeli
+k3s_flannel_iface: eth1
