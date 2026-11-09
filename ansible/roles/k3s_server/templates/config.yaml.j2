@@ -1,0 +1,12 @@
+node-ip: {{ ansible_host }}
+advertise-address: {{ ansible_host }}
+tls-san:
+  - {{ ansible_host }}
+  - {{ inventory_hostname }}
+flannel-iface: {{ k3s_flannel_iface }}
+cluster-cidr: {{ k3s_pod_cidr }}
+# Dış erişim (Ingress, LoadBalancer) GitOps reposundan kurulacak
+disable:
+  - traefik
+  - servicelb
+write-kubeconfig-mode: "0600"

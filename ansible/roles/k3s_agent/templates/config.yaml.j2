@@ -1,0 +1,4 @@
+server: https://{{ hostvars[groups['control_plane'][0]].ansible_host }}:6443
+token: {{ hostvars[groups['control_plane'][0]].k3s_node_token.content | b64decode | trim }}
+node-ip: {{ ansible_host }}
+flannel-iface: {{ k3s_flannel_iface }}

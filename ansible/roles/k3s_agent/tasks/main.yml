@@ -1,0 +1,66 @@
+- name: Create k3s config directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: "0755"
+
+# Token içerdiği için sadece root okuyabilir
+- name: Write k3s agent config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    mode: "0600"
+  notify: Restart k3s-agent
+
+- name: Check installed k3s version
+  ansible.builtin.command: k3s --version
+  register: k3s_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install k3s agent
+  when: k3s_installed.rc != 0 or k3s_version not in k3s_installed.stdout
+  block:
+    - name: Download k3s install script
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: "0755"
+      register: k3s_script
+      until: k3s_script is succeeded
+      retries: 5
+      delay: 30
+
+    # Betik k3s'i GitHub'dan indirir; geçici ağ hatalarında yeniden denenir
+    - name: Run k3s install script
+      ansible.builtin.command: /tmp/k3s-install.sh
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+        INSTALL_K3S_EXEC: agent
+      register: k3s_install
+      until: k3s_install is succeeded
+      retries: 5
+      delay: 30
+
+- name: Enable and start k3s agent
+  ansible.builtin.service:
+    name: k3s-agent
+    state: started
+    enabled: true
+
+# Node henüz kaydolmadıysa kubectl wait hemen NotFound döner; bu yüzden yeniden denenir
+- name: Wait for the agent node to be Ready
+  ansible.builtin.command: >-
+    k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=60s
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  register: k3s_node_ready
+  until: k3s_node_ready.rc == 0
+  retries: 10
+  delay: 10
+  changed_when: false
+
+- name: Label the node as worker
+  ansible.builtin.command: >-
+    k3s kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/worker= --overwrite
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  changed_when: false

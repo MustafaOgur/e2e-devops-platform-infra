@@ -1,0 +1,58 @@
+# Kısıtlı yerel donanım için hafif kurulum (kubeadm yolunun alternatifi: site.yml)
+- name: Prepare all nodes
+  hosts: k8s
+  become: true
+  roles:
+    - common
+
+- name: Install k3s server
+  hosts: control_plane
+  become: true
+  vars_files:
+    - vars/k3s.yml
+  roles:
+    - k3s_server
+
+- name: Join k3s agents
+  hosts: workers
+  become: true
+  vars_files:
+    - vars/k3s.yml
+  roles:
+    - k3s_agent
+
+# Yönetici yetkisi içerdiği için loglara yazılmaz
+- name: Read k3s kubeconfig
+  hosts: control_plane
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read kubeconfig from the server
+      ansible.builtin.slurp:
+        src: /etc/rancher/k3s/k3s.yaml
+      register: k3s_kubeconfig
+      no_log: true
+
+# k3s kubeconfig'i 127.0.0.1'i gösterir; yönetim makinesinden server IP'sine bağlanılmalı.
+# Tek adımda yazıldığı için içerik değişmediyse dosyaya dokunulmaz.
+- name: Write kubeconfig to the control machine
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    k3s_server: "{{ groups['control_plane'][0] }}"
+  tasks:
+    - name: Create kube directory
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'HOME') }}/.kube"
+        state: directory
+        mode: "0700"
+
+    - name: Write kubeconfig with the server address
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+        content: >-
+          {{ hostvars[k3s_server].k3s_kubeconfig.content | b64decode
+          | regex_replace('https://127\.0\.0\.1:6443', 'https://' ~ hostvars[k3s_server].ansible_host ~ ':6443') }}
+        mode: "0600"
+      no_log: true
