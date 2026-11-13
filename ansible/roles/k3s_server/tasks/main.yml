@@ -57,6 +57,15 @@
   delay: 10
   changed_when: false
 
+# config.yaml'daki node-taint sadece ilk kayıtta uygulanır; daha önce kurulmuş node'a da eklenir.
+# NoSchedule mevcut pod'ları taşımaz, sadece yeni pod'ların buraya yerleşmesini engeller.
+- name: Taint the control plane node
+  ansible.builtin.command: >-
+    k3s kubectl taint node {{ inventory_hostname }}
+    node-role.kubernetes.io/control-plane=:NoSchedule --overwrite
+  register: k3s_taint
+  changed_when: "'modified' in k3s_taint.stdout"
+
 # Agent'ların katılması için gereken token
 - name: Read node token
   ansible.builtin.slurp:
