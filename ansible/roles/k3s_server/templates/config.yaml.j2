@@ -10,3 +10,7 @@ disable:
   - traefik
   - servicelb
 write-kubeconfig-mode: "0600"
+# Control plane'de uygulama pod'u çalışmaz; CPU ve RAM API server ile veritabanına kalır.
+# k3s bu ayarı sadece node ilk kaydolurken uygular (mevcut node için tasks/main.yml'e bakın)
+node-taint:
+  - node-role.kubernetes.io/control-plane:NoSchedule
