@@ -10,9 +10,10 @@
 | Kubernetes | v1.37 | v1.37 |
 | Container runtime | containerd 2.x | k3s ile gelen containerd |
 | CNI | Cilium | Flannel |
+| Control plane'de uygulama pod'u | Çalışır | Çalışmaz (taint) |
 | Kullanım | Tam kurulum; yeterli kaynak gerektirir | Kısıtlı donanım; projede kullanılan ortam |
 
-İki yol aynı VM'leri kullanır, aynı anda kurulamaz. İkisi de iki node `Ready` ve kapat-aç testiyle doğrulandı.
+İki yol aynı VM'leri kullanır, aynı anda kurulamaz. k3s yolunda dahili Traefik ve ServiceLB kapalıdır; dış erişim ve sonraki adımlar [gitops reposundadır](https://github.com/MustafaOgur/e2e-devops-platform-gitops).
 
 ## Mimari
 
@@ -40,14 +41,14 @@ flowchart LR
 | `k8s-cp1` | control-plane | 2 | 3,5 GB | `192.168.56.10` |
 | `k8s-w1` | worker | 2 | 4,5 GB | `192.168.56.11` |
 
-Pod ağı `10.244.0.0/16` kullanır.
+Pod ağı `10.244.0.0/16` kullanır. `192.168.56.50–59` aralığı gitops reposundaki MetalLB için ayrılmıştır.
 
 ## Gereksinimler
 
 | Nerede | Gereksinim |
 |--------|-----------|
 | Windows | VirtualBox 7.1+, Vagrant 2.4+ |
-| WSL Ubuntu | `ansible`, `make`, `kubectl` |
+| WSL Ubuntu | `ansible` (`community.general` ve `ansible.posix` koleksiyonları; kubeadm yolu için `kubernetes.core`), `make`, `kubectl` |
 | Donanım | En az 4 çekirdek, 12 GB RAM |
 
 ## Kurulum
@@ -58,6 +59,8 @@ Pod ağı `10.244.0.0/16` kullanır.
 ssh-keygen -t ed25519 -f ~/.ssh/k8s-lab -N "" -C "k8s-lab"
 mkdir -p vagrant/ssh && cp ~/.ssh/k8s-lab.pub vagrant/ssh/
 ```
+
+Vagrant bu public anahtarı VM'lere ekler; `vagrant/ssh/` Git'e girmez.
 
 **2. VM'ler (Windows PowerShell):**
 
@@ -99,6 +102,8 @@ Roller tek control-plane ve istenen sayıda worker'la farklı cluster'lar kurmak
 
 **Kendi sunucularında** `hosts.ini` içindeki IP'leri ve `ansible.cfg` içindeki `remote_user` ile `private_key_file` değerlerini değiştir. Roller Ubuntu 24.04 ve amd64 için yazılmıştır; k3s yolunda node'lar arası ağ kartı `vars/k3s.yml` içindeki `k3s_flannel_iface` ile belirlenir.
 
+k3s yolunda uygulamalar için en az bir worker gerekir.
+
 Birden fazla control-plane (HA) desteklenmez: `[control_plane]` grubuna birden fazla node yazılırsa birbirinden bağımsız cluster'lar oluşur.
 
 ## Repo Yapısı
@@ -106,6 +111,7 @@ Birden fazla control-plane (HA) desteklenmez: `[control_plane]` grubuna birden f
 ```text
 vagrant/Vagrantfile        VM tanımları
 ansible/
+├── ansible.cfg            Inventory, SSH kullanıcısı ve anahtarı
 ├── inventory/hosts.ini    Node'lar ve gruplar
 ├── site.yml               kubeadm kurulumu
 ├── k3s.yml                k3s kurulumu
